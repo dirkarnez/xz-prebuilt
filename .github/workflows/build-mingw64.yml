@@ -1,0 +1,64 @@
+name: cpp-cmake-mingw-prebuilt-release-actions-workflow
+on:
+  push:
+    # Sequence of patterns matched against refs/tags
+    tags:
+      - 'v*' # Push events to matching v*, i.e. v1.0, v20.15.10
+      - 'c*'
+jobs:
+  build:
+    name: Create Release
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    env:
+      libraryName: xz
+      installationPath: xz-installation
+      mingwTargetZip: xz-${{ github.ref_name }}-mingw64-x86_64-posix-seh-rev0-8.1.0.zip
+    steps:
+      - shell: cmd
+        run: |
+          curl https://udomain.dl.sourceforge.net/project/lzmautils/xz-5.4.0.tar.gz --output xz-5.4.0.tar.gz &&^
+          tar -xvf xz-5.4.0.tar.gz &&^
+          cd xz-5.4.0 &&^
+          dir
+          
+      - name: Install MSYS2
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          install: make autoconf automake libtool autogen perl
+                 
+      - name: curl x86_64-8.1.0-release-posix-seh-rt_v6-rev0.7z
+        shell: cmd
+        run:  cd /d ${{ github.workspace }} && curl https://github.com/2641797006/c/blob/master/GCC-zip/x86_64-8.1.0-release-posix-seh-rt_v6-rev0.7z?raw=true -L --output x86_64-8.1.0-release-posix-seh-rt_v6-rev0.7z && dir && 7z.exe x x86_64-8.1.0-release-posix-seh-rt_v6-rev0.7z
+        
+      - name: curl cmake-3.24.0-windows-x86_64.zip
+        shell: cmd
+        run: cd /d ${{ github.workspace }} && curl https://github.com/Kitware/CMake/releases/download/v3.24.0/cmake-3.24.0-windows-x86_64.zip -L --output cmake-3.24.0-windows-x86_64.zip && dir && 7z.exe x cmake-3.24.0-windows-x86_64.zip
+      
+      - name: set PATH, check mingw version, cmake generate, build and install
+        shell: msys2 {0}
+        run: |
+          workspace=$(pwd) &&
+          mv "xz-5.4.0" "xz" && 
+          cd xz && 
+          export PATH="$workspace/mingw64:$workspace/mingw64/bin:$workspace/msys64/usr/bin:/usr/bin" &&
+          g++ --version && 
+          ./configure --prefix="$(pwd)/${{ env.installationPath }}" &&
+          make && make install
+            
+      - name: Archive Release
+        uses: thedoctor0/zip-release@master
+        with:
+          type: 'zip'
+          directory: "xz/${{ env.installationPath }}"
+          filename: "${{ env.mingwTargetZip }}"
+        
+      - name: Release prebuilt
+        uses: ncipollo/release-action@v1
+        with:
+          artifacts: "xz/${{ env.installationPath }}/${{ env.mingwTargetZip }}"
+          allowUpdates: true
+          token: ${{ secrets.GITHUB_TOKEN }}
